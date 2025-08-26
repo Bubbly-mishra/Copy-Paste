@@ -1,72 +1,82 @@
-# Duplicate Party Handling in Automation
+# Handling Duplicate Party in Automation (Reject Case)
 
-## Current Situation
-- A **Party creation service** exists.  
-- Whenever a party is created → it calls a **Duplicate Check Service**.  
-- Duplicate Check Service → calls **Client Index Service** to fetch possible duplicates.  
-- Automations replicate this flow → but cause **too many Client Index calls**, leading to overload/errors.  
+## Background
+In the current system:
+- A **Party Creation Service** is used to create new parties.  
+- When a new party is created, the system calls the **Duplicate Check Service**.  
+- The Duplicate Check Service, in turn, calls the **Client Index Service** to identify potential duplicates.  
 
----
-
-## Fix Already Applied
-- For automation, if the party name is in a **predefined list** (e.g., `"Black Rock"`):  
-  - **Skip Client Index call**.  
-  - Return a **mock duplicate party response**.  
-- This reduces load on Client Index ✅.  
+### Problem
+During **automation runs**, this process leads to:
+- Multiple calls being made to the **Client Index Service**.  
+- High load on Client Index, which can only handle limited requests efficiently.  
+- Errors due to excessive parallel requests during test executions.  
 
 ---
 
-## New Issue
-- After duplicates are found:  
-  1. A **blocking task** is created (approve/reject duplicate party).  
-  2. Approving/rejecting requires referencing another party (e.g., *Reject because Black Rock already exists*).  
-  3. Automation still needs duplicates to simulate this approval/rejection step.  
+## Implemented Fix
+To reduce load on Client Index during automation:
+- A **predefined list of party names** (e.g., `"Black Rock"`) has been introduced.  
+- If an automation uses one of these party names:  
+  - The Duplicate Check Service **skips calling Client Index**.  
+  - Instead, it returns a **mock duplicate party response**.  
+
+This approach ensures Client Index is protected from unnecessary load during test runs.  
 
 ---
 
-## Approaches
+## New Challenge: Reject Flow
+After a duplicate is detected:
+- A **blocking task** is created in the system.  
+- To **reject** this task, a reference to an existing duplicate party must be provided.  
 
-### Option 1: Continue Using Duplicate Service + Mock Response
-- In automation, when calling Duplicate Service with `"Black Rock"`:  
-  - Skip Client Index call.  
-  - Return mock duplicate data.  
-  - Automation proceeds with approve/reject task using mock data.  
+This means:  
+- Even in automation, we still need a way to supply a duplicate party reference during **rejection**.  
+- The question is how best to simulate this behavior without overloading Client Index.  
+
+---
+
+## Options
+
+### **Option 1: Use Duplicate Service with Mock Responses**
+In this approach:
+- The automation calls the **Duplicate Check Service** with a predefined party name (e.g., `"Black Rock"`).  
+- The Duplicate Service recognizes the predefined name, skips Client Index, and returns a **mock duplicate party**.  
+- This mock duplicate is then used in the rejection flow.  
 
 **Pros ✅**
-- Consistent with real flow.  
-- Less maintenance (no dummy party concept needed).  
-- Future-proof (automation adapts if Duplicate Service logic changes).  
+- **Realistic**: Closely mirrors the actual production flow.  
+- **Maintainable**: Any changes in Duplicate Service logic are automatically reflected in automation.  
+- **Future-proof**: Keeps test data aligned with system behavior.  
 
 **Cons ❌**
-- Still calls Duplicate Service multiple times (though lightweight).  
-- Mocking duplicate responses may get complex as test cases scale.  
+- Still involves Duplicate Service calls (though lightweight).  
+- Requires maintaining mock response data.  
 
 ---
 
-### Option 2: Create a Dummy Party in Automation (Skip Duplicate Service)
-- Automation directly creates a **dummy party** (e.g., `"AutomationDummyParty"`) to simulate reject/approve logic.  
-- Completely bypasses Duplicate Service in automation steps.  
+### **Option 2: Create a Dummy Party Directly in Automation**
+In this approach:
+- Automation bypasses the Duplicate Check Service entirely.  
+- Instead, it creates a **dummy party** (e.g., `"AutomationDummyParty"`) that acts as a reference for rejection.  
 
 **Pros ✅**
-- Lightweight and faster.  
-- No Duplicate Service calls at all.  
-- Zero risk of accidental Client Index calls.  
+- **Lightweight**: No Duplicate Service calls at all.  
+- **Fast**: Reduces overhead during automation runs.  
+- **Simple**: No need for mock data setup in Duplicate Service.  
 
 **Cons ❌**
-- Flow diverges from production (inconsistent).  
-- Harder to maintain if Duplicate Service logic changes.  
-- Test data may drift from real responses.  
+- **Less realistic**: Flow diverges from production behavior.  
+- **Maintenance overhead**: If duplicate handling logic changes in production, automation will not reflect it.  
+- **Risk of false positives**: Tests may pass in automation but fail in production.  
 
 ---
 
 ## Recommendation
-- If **automation should mirror production** → choose **Option 1 (mock via Duplicate Service)**.  
-- If **performance and simplicity** are more important → choose **Option 2 (dummy party)**.  
+- For **functional and regression automation**:  
+  Use **Option 1**. This ensures automation remains aligned with production workflows and validates the real duplicate handling process.  
 
-👉 Suggested: **Option 1**. Automations are meant to validate **real-world flows**, so keeping them consistent avoids false positives.  
+- For **load or performance testing**:  
+  Option 2 may be considered to reduce overhead and isolate performance testing from Client Index or Duplicate Service dependencies.  
 
----
-
-## Hybrid Approach (Optional)
-- **Functional Tests** → Use **Option 1** with mock duplicate service calls.  
-- **Load/Stress Tests** → Use **Option 2** with dummy parties to avoid duplicate service calls entirely.  
+👉 Overall, **Option 1 is the preferred approach** for long-term maintainability and accuracy of automation.  
