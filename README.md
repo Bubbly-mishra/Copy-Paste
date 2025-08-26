@@ -80,3 +80,15 @@ In this approach:
   Option 2 may be considered to reduce overhead and isolate performance testing from Client Index or Duplicate Service dependencies.  
 
 👉 Overall, **Option 1 is the preferred approach** for long-term maintainability and accuracy of automation.  
+
+
+
+
+As discussed regarding the ISO country, I’ve added the line where we are updating the countries in the balloon. We also aligned with Kishore, and he mentioned that even if the country name is not passed in the payload, it should still return a country ISO. Based on that, it seems fine to remove the country name from the payload.
+
+Could you please confirm this approach?
+
+
+Could you please confirm if we are aligned on skipping the four-step process and consolidating it into a single step in the automation? The approach here is to create a party using the party ID, and in case of a duplicate, it will be rejected as per the requirement. From my perspective, this one step should be sufficient and make the flow clearer and easier to understand.
+
+Let me know if you have any concerns—we can discuss further if needed.
