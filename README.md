@@ -1,79 +1,72 @@
-Current situation (before fix)
+# Duplicate Party Handling in Automation
 
-You have a Party creation service.
+## Current Situation
+- A **Party creation service** exists.  
+- Whenever a party is created → it calls a **Duplicate Check Service**.  
+- Duplicate Check Service → calls **Client Index Service** to fetch possible duplicates.  
+- Automations replicate this flow → but cause **too many Client Index calls**, leading to overload/errors.  
 
-Whenever a party is created → it calls a duplicate check service.
+---
 
-The duplicate check service calls Client Index Service to fetch possible duplicates.
+## Fix Already Applied
+- For automation, if the party name is in a **predefined list** (e.g., `"Black Rock"`):  
+  - **Skip Client Index call**.  
+  - Return a **mock duplicate party response**.  
+- This reduces load on Client Index ✅.  
 
-Automations also simulate this flow → so automation ends up calling Client Index too many times, causing overload/errors.
+---
 
-Fix you’ve already applied
+## New Issue
+- After duplicates are found:  
+  1. A **blocking task** is created (approve/reject duplicate party).  
+  2. Approving/rejecting requires referencing another party (e.g., *Reject because Black Rock already exists*).  
+  3. Automation still needs duplicates to simulate this approval/rejection step.  
 
-For automation, if the party name is in a predefined list (e.g., "Black Rock"),
-→ you skip the Client Index call and just return a mock duplicate party response.
+---
 
-This reduces load on Client Index ✅.
+## Approaches
 
-Now the issue
+### Option 1: Continue Using Duplicate Service + Mock Response
+- In automation, when calling Duplicate Service with `"Black Rock"`:  
+  - Skip Client Index call.  
+  - Return mock duplicate data.  
+  - Automation proceeds with approve/reject task using mock data.  
 
-After duplicates are found:
+**Pros ✅**
+- Consistent with real flow.  
+- Less maintenance (no dummy party concept needed).  
+- Future-proof (automation adapts if Duplicate Service logic changes).  
 
-A blocking task is created (e.g., approve/reject duplicate party).
+**Cons ❌**
+- Still calls Duplicate Service multiple times (though lightweight).  
+- Mocking duplicate responses may get complex as test cases scale.  
 
-Approving/rejecting requires referencing another party (e.g., "Reject because Black Rock already exists").
+---
 
-Automation still needs duplicates to simulate this approval/rejection step.
+### Option 2: Create a Dummy Party in Automation (Skip Duplicate Service)
+- Automation directly creates a **dummy party** (e.g., `"AutomationDummyParty"`) to simulate reject/approve logic.  
+- Completely bypasses Duplicate Service in automation steps.  
 
-Now you’re debating two approaches:
+**Pros ✅**
+- Lightweight and faster.  
+- No Duplicate Service calls at all.  
+- Zero risk of accidental Client Index calls.  
 
-Option 1: Continue using Duplicate Service + Mock Response
+**Cons ❌**
+- Flow diverges from production (inconsistent).  
+- Harder to maintain if Duplicate Service logic changes.  
+- Test data may drift from real responses.  
 
-In automation steps, when calling the duplicate service with "Black Rock",
-→ Duplicate Service again skips Client Index call,
-→ returns mock duplicate data,
-→ automation proceeds with approve/reject task using this mock data.
+---
 
-✅ Pros
+## Recommendation
+- If **automation should mirror production** → choose **Option 1 (mock via Duplicate Service)**.  
+- If **performance and simplicity** are more important → choose **Option 2 (dummy party)**.  
 
-Consistency: Automation flow is the same as real flow (calls duplicate service → gets duplicates → creates blocking task → approve/reject).
+👉 Suggested: **Option 1**. Automations are meant to validate **real-world flows**, so keeping them consistent avoids false positives.  
 
-Less maintenance: You don’t have to handle a separate “dummy party” concept inside automation.
+---
 
-Future-proof: If duplicate service logic changes, automation still reflects the real system behavior.
-
-❌ Cons
-
-Extra overhead: Even though Client Index isn’t called, Duplicate Service is still invoked multiple times.
-
-More moving parts: Mocking duplicate responses adds complexity if test cases scale.
-
-Option 2: Create a Dummy Party Inside Automation (Skip Duplicate Service)
-
-Instead of calling duplicate service at this step, automation directly creates a dummy party (like "AutomationDummyParty") and uses it to simulate reject/approve logic.
-
-This bypasses duplicate service completely in automation flows.
-
-✅ Pros
-
-Lightweight: No duplicate service calls at all during automation.
-
-Faster: Eliminates even mock duplicate lookups.
-
-No risk of accidental Client Index calls (since duplicate service is fully bypassed).
-
-❌ Cons
-
-Inconsistent with real flow: Automation behaves differently than production (since real system always calls duplicate service).
-
-Harder to maintain: If duplicate service changes behavior (e.g., new fields, logic), automation won’t capture those changes.
-
-Higher test fragility: Test data may drift apart from real system responses.
-
-My Recommendation
-
-It depends on what you value more:
-
-If automation must stay close to production behavior → Option 1 (use Duplicate Service with mock response) is better. It keeps the test realistic and easier to maintain in the long run.
-
-If performance & simplicity matter more for automation (and you’re okay with a less realistic flow) → Option 2 (dummy party) is leaner and avoids duplicate service entirely.
+## Hybrid Approach (Optional)
+- **Functional Tests** → Use **Option 1** with mock duplicate service calls.  
+- **Load/Stress Tests** → Use **Option 2** with dummy parties to avoid duplicate service calls entirely.  
